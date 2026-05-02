@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>🌏 ASEAN Economic Indicators</h1>
+
+<div class="controls">
+    <label>Country:
+        <select id="countrySelect">
+            {% for id, name in countries %}
+            <option value="{{ id }}">{{ name }}</option>
+            {% endfor %}
+        </select>
+    </label>
+
+    <label>Indicator:
+        <select id="indicatorSelect">
+            {% for id, name in indicators %}
+            <option value="{{ id }}">{{ name }}</option>
+            {% endfor %}
+        </select>
+    </label>
+
+    <button onclick="loadChart()">Show Chart</button>
+</div>
+
+<canvas id="myChart"></canvas>
+
+<div id="definitionBox" style="display:none;">
+    <h3>📖 Indicator Description</h3>
+    <p id="definitionText"></p>
+</div>
+
+<h2>Browse by Country</h2>
+<div class="country-links">
+    {% for id, name in countries %}
+    <a href="/country/{{ id }}" class="country-btn">{{ name }}</a>
+    {% endfor %}
+</div>
+
+<script>
+let chart;
+
+async function loadChart() {
+    const country = document.getElementById("countrySelect").value;
+    const indicator = document.getElementById("indicatorSelect").value;
+
+    const indicatorText = document.getElementById("indicatorSelect").selectedOptions[0].text;
+    const unitMatch = indicatorText.match(/\(([^)]+)\)$/);
+    const unit = unitMatch ? unitMatch[1] : "Value";
+
+    const res = await fetch(`/data?country=${country}&indicator=${indicator}`);
+    const json = await res.json();
+
+    const data = json.chartData;
+    const definition = json.definition;
+
+    const labels = data.map(d => d.year);
+    const values = data.map(d => d.value);
+    const colors = data.map(d => d.crisis ? "#e74c3c" : "#2980b9");
+
+    if (chart) chart.destroy();
+
+    chart = new Chart(document.getElementById("myChart"), {
+        type: "line",
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: "Normal Year",
+                    data: values,
+                    borderColor: "#2980b9",
+                    backgroundColor: "rgba(41, 128, 185, 0.1)",
+                    pointBackgroundColor: colors,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3
+                },
+                {
+                    label: "Crisis Year",
+                    data: [],
+                    pointBackgroundColor: "#e74c3c",
+                    pointRadius: 5,
+                    borderColor: "transparent",
+                    backgroundColor: "transparent"
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: "top",
+                    labels: {
+                        usePointStyle: true,
+                        pointStyle: "circle",
+                        generateLabels: function() {
+                            return [
+                                {
+                                    text: "Normal Year",
+                                    fillStyle: "#2980b9",
+                                    strokeStyle: "#2980b9",
+                                    pointStyle: "circle"
+                                },
+                                {
+                                    text: "Crisis Year",
+                                    fillStyle: "#e74c3c",
+                                    strokeStyle: "#e74c3c",
+                                    pointStyle: "circle"
+                                }
+                            ];
+                        }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let value = context.parsed.y;
+                            return unit + ": " + value.toLocaleString();
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: "Year",
+                        color: "#2c3e50",
+                        font: {
+                            size: 13,
+                            weight: "bold"
+                        }
+                    }
+                },
+                y: {
+                    beginAtZero: false,
+                    title: {
+                        display: true,
+                        text: unit,
+                        color: "#2c3e50",
+                        font: {
+                            size: 13,
+                            weight: "bold"
+                        }
+                    },
+                    ticks: {
+                        callback: function(value) {
+                            if (value >= 1e9) return (value / 1e9).toFixed(1) + "B";
+                            if (value >= 1e6) return (value / 1e6).toFixed(1) + "M";
+                            return value;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Show definition at the bottom
+    if (definition) {
+        document.getElementById("definitionText").innerText = definition;
+        document.getElementById("definitionBox").style.display = "block";
+    }
+}
+</script>
+{% endblock %}
