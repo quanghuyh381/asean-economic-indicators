@@ -20,6 +20,8 @@
     </label>
 
     <button onclick="loadChart()">Show Chart</button>
+    <button onclick="downloadFile('csv')">⬇ Download CSV</button>
+    <button onclick="downloadFile('excel')">⬇ Download Excel</button>
 </div>
 
 <canvas id="myChart"></canvas>
@@ -186,6 +188,11 @@ async function loadChart() {
         document.getElementById("definitionText").innerText = definition;
         document.getElementById("definitionBox").style.display = "block";
     }
+}
+function downloadFile(format) {
+    const country = document.getElementById("countrySelect").value;
+    const indicator = document.getElementById("indicatorSelect").value;
+    window.location.href = `/download?country=${country}&indicator=${indicator}&format=${format}`;
 }
 </script>
 {% endblock %}
