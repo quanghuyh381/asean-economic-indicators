@@ -2521,13 +2521,20 @@ CALL summarize('country', 'VNM', 'GDP');
 CALL summarize('year', '2024', 'Population');
 SELECT * FROM fact_economic_data where country_id = 'VNM' and indicator_id = 2;
 
-CREATE OR REPLACE PROCEDURE correlate(
-    p_mode TEXT,               -- 'single' or 'compare'
+CREATE OR REPLACE FUNCTION correlate(
+    p_mode TEXT,                -- 'single' or 'compare'
     syntax_country_id_1 CHAR(3), 
     syntax_ind_name_1 TEXT,
     syntax_ind_name_2 TEXT,
-    syntax_country_id_2 CHAR(3) DEFAULT NULL -- Optional for 'single' mode
+    syntax_country_id_2 CHAR(3) DEFAULT NULL
 )
+RETURNS TABLE(
+    correlation_r NUMERIC,
+    relationship TEXT,
+    observations BIGINT,
+    target_1 TEXT,
+    target_2 TEXT
+) 
 LANGUAGE plpgsql
 AS $$
 DECLARE
@@ -2535,7 +2542,7 @@ DECLARE
     corr_name1 TEXT; corr_name2 TEXT;
     corr_val NUMERIC;
     corr_obs BIGINT;
-    interpretation TEXT;
+    qualitative_interpretation TEXT;
 BEGIN
     -- 1. Resolve Indicators (Fuzzy Match)
     SELECT indicator_id, indicator_name INTO corr_id1, corr_name1 
@@ -2544,19 +2551,16 @@ BEGIN
     SELECT indicator_id, indicator_name INTO corr_id2, corr_name2 
     FROM dim_indicators WHERE indicator_name ILIKE '%' || syntax_ind_name_2 || '%' LIMIT 1;
 
-    -- 2. Execute Analysis Logic
+    -- 2. Execute Analysis Logic (Casting to float8 for the CORR function)
     IF p_mode = 'single' THEN
-        -- Internal: Var A vs Var B in Country 1
-        SELECT CORR(f1.value, f2.value), COUNT(*) INTO corr_val, corr_obs
+        SELECT CORR(f1.value::float8, f2.value::float8)::numeric, COUNT(*) INTO corr_val, corr_obs
         FROM fact_economic_data f1
         JOIN fact_economic_data f2 ON f1.year_id = f2.year_id AND f1.country_id = f2.country_id
         WHERE f1.country_id = UPPER(syntax_country_id_1)
           AND f1.indicator_id = corr_id1 AND f2.indicator_id = corr_id2;
 
     ELSIF p_mode = 'compare' THEN
-        -- Comparative: Var A (Country 1) vs Var B (Country 2)
-        -- If user passes same indicator name twice, it handles Mode 2 automatically.
-        SELECT CORR(f1.value, f2.value), COUNT(*) INTO corr_val, corr_obs
+        SELECT CORR(f1.value::float8, f2.value::float8)::numeric, COUNT(*) INTO corr_val, corr_obs
         FROM fact_economic_data f1
         JOIN fact_economic_data f2 ON f1.year_id = f2.year_id
         WHERE f1.country_id = UPPER(syntax_country_id_1) AND f1.indicator_id = corr_id1
@@ -2564,30 +2568,26 @@ BEGIN
     END IF;
 
     -- 3. Qualitative Interpretation
-    interpretation := CASE 
+    qualitative_interpretation := CASE 
         WHEN ABS(corr_val) > 0.7 THEN 'Strong'
         WHEN ABS(corr_val) > 0.4 THEN 'Moderate'
         WHEN corr_val IS NULL THEN 'Insufficient Data'
         ELSE 'Weak/None'
     END;
 
-    -- 4. Dynamic Report Header
-    RAISE NOTICE '-------------------------------------------------------';
-    RAISE NOTICE ' % ANALYSIS REPORT ', UPPER(p_mode);
-    RAISE NOTICE '-------------------------------------------------------';
-    RAISE NOTICE ' Target 1: % (%)', corr_name1, UPPER(syntax_country_id_1);
-    RAISE NOTICE ' Target 2: % (%)', corr_name2, UPPER(COALESCE(syntax_country_id_2, syntax_country_id_1));
-    RAISE NOTICE '-------------------------------------------------------';
-    RAISE NOTICE ' Correlation (r): % ', ROUND(corr_val, 4);
-    RAISE NOTICE ' Relationship:    % ', interpretation;
-    RAISE NOTICE ' Observations:    % ', corr_obs;
-    RAISE NOTICE '-------------------------------------------------------';
+    -- 4. Return the result as a table row
+    RETURN QUERY SELECT 
+        ROUND(corr_val, 4), 
+        qualitative_interpretation, 
+        corr_obs,
+        corr_name1 || ' (' || UPPER(syntax_country_id_1) || ')',
+        corr_name2 || ' (' || UPPER(COALESCE(syntax_country_id_2, syntax_country_id_1)) || ')';
 END;
 $$;
 
-CALL correlate('single', 'VNM', 'GDP', 'Inflation');
-CALL correlate('compare', 'VNM', 'GDP', 'GDP', 'THA');
-CALL correlate('compare', 'VNM', 'GDP', 'Inflation', 'THA');
+SELECT * FROM correlate('single', 'VNM', 'GDP', 'Inflation');
+SELECT * FROM correlate('compare', 'VNM', 'GDP', 'GDP', 'THA');
+SELECT * FROM correlate('compare', 'VNM', 'GDP', 'Inflation', 'THA');
 
 DROP VIEW IF EXISTS v_economic_analysis;
 CREATE OR REPLACE VIEW v_economic_analysis AS
@@ -2778,5 +2778,5 @@ INSERT INTO dim_units (unit_name) VALUES ('Test unit');
 UPDATE dim_units SET unit_name = 'Test unit 2' WHERE unit_name = 'Test unit';
 DELETE FROM dim_units WHERE unit_name = 'Test unit 2';
 
-SELECT * FROM audit_log
+SELECT * FROM audit_log;
 

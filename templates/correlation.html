@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="corr-layout">
+
+    <div class="corr-main">
+        <h1>📊 Correlation Analysis</h1>
+        <p id="chartSubtitle" style="color:#777; font-size:13px;">Select options and click Analyse</p>
+        <canvas id="corrChart"></canvas>
+
+        <div id="resultBox" style="display:none;">
+            <div class="result-grid">
+                <div class="result-card">
+                    <div class="result-label">Correlation (r)</div>
+                    <div class="result-value" id="resCorr">—</div>
+                </div>
+                <div class="result-card">
+                    <div class="result-label">Relationship</div>
+                    <div class="result-value" id="resInterp">—</div>
+                </div>
+                <div class="result-card">
+                    <div class="result-label">Observations</div>
+                    <div class="result-value" id="resObs">—</div>
+                </div>
+                <div class="result-card">
+                    <div class="result-label">Target 1</div>
+                    <div class="result-value-sm" id="resName1">—</div>
+                </div>
+                <div class="result-card">
+                    <div class="result-label">Target 2</div>
+                    <div class="result-value-sm" id="resName2">—</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="corr-sidebar">
+        <div class="sidebar-section">
+            <label>Mode</label>
+            <select id="modeSelect" onchange="toggleMode()">
+                <option value="single">Single Country</option>
+                <option value="compare">Compare Countries</option>
+            </select>
+        </div>
+
+        <div class="sidebar-section">
+            <label>Country 1</label>
+            <select id="country1">
+                {% for id, name in countries %}
+                <option value="{{ id }}">{{ name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="sidebar-section" id="country2Box" style="display:none;">
+            <label>Country 2</label>
+            <select id="country2">
+                {% for id, name in countries %}
+                <option value="{{ id }}" {% if loop.index == 2 %}selected{% endif %}>{{ name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="sidebar-section">
+            <label id="ind1Label">Indicator 1 (X-Axis)</label>
+            <select id="indicator1">
+                {% for id, name in indicators %}
+                <option value="{{ name }}">{{ name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="sidebar-section">
+            <label id="ind2Label">Indicator 2 (Y-Axis)</label>
+            <select id="indicator2">
+                {% for id, name in indicators %}
+                <option value="{{ name }}" {% if loop.index == 2 %}selected{% endif %}>{{ name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <button onclick="analyse()" class="update-btn">🔍 Analyse</button>
+        <button onclick="resetAll()" class="reset-btn">↺ Reset</button>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let corrChart;
+
+function toggleMode() {
+    const mode = document.getElementById("modeSelect").value;
+    const c2box = document.getElementById("country2Box");
+    const ind1label = document.getElementById("ind1Label");
+    const ind2label = document.getElementById("ind2Label");
+    if (mode === "compare") {
+        c2box.style.display = "block";
+        ind1label.innerText = "Indicator (Country 1)";
+        ind2label.innerText = "Indicator (Country 2)";
+    } else {
+        c2box.style.display = "none";
+        ind1label.innerText = "Indicator 1 (X-Axis)";
+        ind2label.innerText = "Indicator 2 (Y-Axis)";
+    }
+}
+
+async function analyse() {
+    const mode = document.getElementById("modeSelect").value;
+    const country1 = document.getElementById("country1").value;
+    const country2 = document.getElementById("country2").value;
+    const indicator1 = document.getElementById("indicator1").value;
+    const indicator2 = document.getElementById("indicator2").value;
+
+    const url = `/correlation/data?mode=${mode}&country1=${country1}&country2=${country2}&indicator1=${encodeURIComponent(indicator1)}&indicator2=${encodeURIComponent(indicator2)}`;
+    const res = await fetch(url);
+    const json = await res.json();
+
+    if (json.error) {
+        alert("❌ " + json.error);
+        return;
+    }
+
+    document.getElementById("chartSubtitle").innerText = `${json.name1} vs ${json.name2}`;
+
+    const corrColor = Math.abs(json.corr) > 0.7 ? "#27ae60" :
+                      Math.abs(json.corr) > 0.4 ? "#f39c12" : "#e74c3c";
+
+    if (corrChart) corrChart.destroy();
+
+    corrChart = new Chart(document.getElementById("corrChart"), {
+        type: "scatter",
+        data: {
+            datasets: [{
+                label: `${json.name1} vs ${json.name2}`,
+                data: json.points.map(p => ({ x: p.x, y: p.y, year: p.year })),
+                backgroundColor: corrColor + "aa",
+                pointRadius: 7,
+                pointHoverRadius: 9,
+                borderColor: corrColor,
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            return `Year ${ctx.raw.year}: (${ctx.raw.x.toLocaleString()}, ${ctx.raw.y.toLocaleString()})`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: json.name1,
+                        color: "#2c3e50",
+                        font: { size: 12, weight: "bold" }
+                    },
+                    ticks: {
+                        callback: v => v >= 1e9 ? (v/1e9).toFixed(1)+"B" :
+                                       v >= 1e6 ? (v/1e6).toFixed(1)+"M" : v
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: json.name2,
+                        color: "#2c3e50",
+                        font: { size: 12, weight: "bold" }
+                    },
+                    ticks: {
+                        callback: v => v >= 1e9 ? (v/1e9).toFixed(1)+"B" :
+                                       v >= 1e6 ? (v/1e6).toFixed(1)+"M" : v
+                    }
+                }
+            }
+        }
+    });
+
+    // Show results
+    document.getElementById("resCorr").innerText = json.corr;
+    document.getElementById("resCorr").style.color = corrColor;
+    document.getElementById("resInterp").innerText = json.interpretation;
+    document.getElementById("resInterp").style.color = corrColor;
+    document.getElementById("resObs").innerText = json.obs;
+    document.getElementById("resName1").innerText = json.name1;
+    document.getElementById("resName2").innerText = json.name2;
+    document.getElementById("resultBox").style.display = "block";
+}
+
+function resetAll() {
+    document.getElementById("modeSelect").value = "single";
+    document.getElementById("country1").selectedIndex = 0;
+    document.getElementById("country2").selectedIndex = 1;
+    document.getElementById("indicator1").selectedIndex = 0;
+    document.getElementById("indicator2").selectedIndex = 1;
+    document.getElementById("country2Box").style.display = "none";
+    document.getElementById("resultBox").style.display = "none";
+    document.getElementById("chartSubtitle").innerText = "Select options and click Analyse";
+    if (corrChart) corrChart.destroy();
+}
+</script>
+{% endblock %}

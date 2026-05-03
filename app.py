@@ -186,5 +186,77 @@ def map_page():
         })
 
     return render_template("map.html", data=data, years=years)
+@app.route("/correlation")
+def correlation():
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT country_id, country_name FROM dim_countries ORDER BY country_name")
+    countries = cur.fetchall()
+    cur.execute("SELECT indicator_id, indicator_name FROM dim_indicators ORDER BY indicator_id")
+    indicators = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template("correlation.html", countries=countries, indicators=indicators)
+
+@app.route("/correlation/data")
+def correlation_data():
+    mode = request.args.get("mode", "single")
+    country1 = request.args.get("country1", "VNM")
+    country2 = request.args.get("country2", "THA")
+    indicator1 = request.args.get("indicator1", "GDP")
+    indicator2 = request.args.get("indicator2", "Inflation")
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    # Call correlate function directly from PostgreSQL
+    cur.execute("""
+        SELECT * FROM correlate(%s, %s, %s, %s, %s)
+    """, (mode, country1, indicator1, indicator2,
+          country2 if mode == 'compare' else None))
+    row = cur.fetchone()
+
+    # Get scatter plot points
+    if mode == "single":
+        cur.execute("""
+            SELECT f1.year_id, f1.value, f2.value
+            FROM fact_economic_data f1
+            JOIN fact_economic_data f2
+                ON f1.year_id = f2.year_id AND f1.country_id = f2.country_id
+            JOIN dim_indicators i1 ON f1.indicator_id = i1.indicator_id
+            JOIN dim_indicators i2 ON f2.indicator_id = i2.indicator_id
+            WHERE f1.country_id = %s
+            AND i1.indicator_name ILIKE %s
+            AND i2.indicator_name ILIKE %s
+            ORDER BY f1.year_id
+        """, (country1, f'%{indicator1}%', f'%{indicator2}%'))
+    else:
+        cur.execute("""
+            SELECT f1.year_id, f1.value, f2.value
+            FROM fact_economic_data f1
+            JOIN fact_economic_data f2 ON f1.year_id = f2.year_id
+            JOIN dim_indicators i1 ON f1.indicator_id = i1.indicator_id
+            JOIN dim_indicators i2 ON f2.indicator_id = i2.indicator_id
+            WHERE f1.country_id = %s AND f2.country_id = %s
+            AND i1.indicator_name ILIKE %s
+            AND i2.indicator_name ILIKE %s
+            ORDER BY f1.year_id
+        """, (country1, country2, f'%{indicator1}%', f'%{indicator2}%'))
+
+    points = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    if not row or row[0] is None:
+        return jsonify({"error": "Insufficient data"})
+
+    return jsonify({
+        "corr": float(row[0]),
+        "interpretation": row[1],
+        "obs": row[2],
+        "name1": row[3],
+        "name2": row[4],
+        "points": [{"year": p[0], "x": float(p[1]), "y": float(p[2])} for p in points]
+    })
 if __name__ == "__main__":
     app.run(debug=True)
