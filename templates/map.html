@@ -44,17 +44,18 @@ const incomeColors = {
     "Low Income": "#e74c3c"
 };
 
-const countryCoords = {
-    "BRN": [4.5353, 114.7277],
-    "KHM": [12.5657, 104.9910],
-    "IDN": [-0.7893, 113.9213],
-    "LAO": [19.8563, 102.4955],
-    "MYS": [4.2105, 101.9758],
-    "MMR": [21.9162, 95.9560],
-    "PHL": [12.8797, 121.7740],
-    "SGP": [1.3521, 103.8198],
-    "THA": [15.8700, 100.9925],
-    "VNM": [14.0583, 108.2772]
+// ISO 3166-1 alpha-3 to alpha-2 mapping for GeoJSON
+const codeMap = {
+    "BRN": "BN",
+    "KHM": "KH",
+    "IDN": "ID",
+    "LAO": "LA",
+    "MYS": "MY",
+    "MMR": "MM",
+    "PHL": "PH",
+    "SGP": "SG",
+    "THA": "TH",
+    "VNM": "VN"
 };
 
 const map = L.map("map").setView([7.0, 110.0], 4);
@@ -62,52 +63,73 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "© OpenStreetMap contributors"
 }).addTo(map);
 
-let markers = [];
+let geojsonLayer = null;
+let currentYearData = {};
+
+// Fetch GeoJSON for ASEAN countries
+async function loadGeoJSON() {
+    const res = await fetch("https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson");
+    const geojson = await res.json();
+
+    // Filter only ASEAN countries
+    const aseanCodes = Object.values(codeMap);
+    geojson.features = geojson.features.filter(f =>
+        aseanCodes.includes(f.properties.ISO_A2)
+    );
+    return geojson;
+}
+
+function getCountryByAlpha2(alpha2, yearData) {
+    const alpha3 = Object.entries(codeMap).find(([k, v]) => v === alpha2)?.[0];
+    return yearData.find(c => c.id === alpha3);
+}
+
+function styleFeature(feature) {
+    const alpha2 = feature.properties.ISO_A2;
+    const country = getCountryByAlpha2(alpha2, Object.values(currentYearData));
+    const color = country ? (incomeColors[country.income] || "#ccc") : "#ccc";
+    return {
+        fillColor: color,
+        weight: 1.5,
+        opacity: 1,
+        color: "white",
+        fillOpacity: 0.75
+    };
+}
+
+function onEachFeature(feature, layer) {
+    layer.on({
+        mouseover: function(e) {
+            const alpha2 = feature.properties.ISO_A2;
+            const country = getCountryByAlpha2(alpha2, Object.values(currentYearData));
+            if (country) {
+                layer.bindPopup(`
+                    <b>${country.name}</b><br>
+                    Year: <b>${document.getElementById("yearLabel").innerText}</b><br>
+                    Income Group: <b>${country.income}</b><br>
+                    Region: ${country.region}
+                `).openPopup();
+            }
+            layer.setStyle({ weight: 3, color: "#333", fillOpacity: 0.9 });
+        },
+        mouseout: function() {
+            geojsonLayer.resetStyle(layer);
+        }
+    });
+}
 
 function updateMap(yearIndex) {
     const year = years[yearIndex];
     const countries = allData[year] || [];
+    currentYearData = countries;
 
     document.getElementById("yearLabel").innerText = year;
     document.getElementById("tableYear").innerText = year;
 
-    // Remove old markers
-    markers.forEach(m => map.removeLayer(m));
-    markers = [];
-
-    // Add new markers
-    countries.forEach(c => {
-        const coords = countryCoords[c.id];
-        if (!coords) return;
-        const color = incomeColors[c.income] || "#999";
-
-        const circle = L.circleMarker(coords, {
-            radius: 20,
-            fillColor: color,
-            color: "white",
-            weight: 2,
-            opacity: 1,
-            fillOpacity: 0.85
-        })
-        .addTo(map)
-        .bindPopup(`
-            <b>${c.name}</b><br>
-            Year: <b>${year}</b><br>
-            Income Group: <b>${c.income}</b><br>
-            Region: ${c.region}
-        `);
-
-        const label = L.marker(coords, {
-            icon: L.divIcon({
-                className: "",
-                html: `<div style="color:white; font-weight:bold; font-size:10px; text-align:center; width:40px; margin-left:-20px; margin-top:-8px;">${c.name.split(" ")[0]}</div>`,
-                iconSize: [40, 16]
-            })
-        }).addTo(map);
-
-        markers.push(circle);
-        markers.push(label);
-    });
+    // Update GeoJSON colors
+    if (geojsonLayer) {
+        geojsonLayer.setStyle(styleFeature);
+    }
 
     // Update table
     const tbody = document.getElementById("incomeTableBody");
@@ -126,15 +148,29 @@ function updateMap(yearIndex) {
     });
 }
 
-// Set up slider
-const slider = document.getElementById("yearSlider");
-slider.max = years.length - 1;
-slider.value = 0;
-slider.addEventListener("input", function() {
-    updateMap(parseInt(this.value));
-});
+// Initialize
+(async () => {
+    const geojson = await loadGeoJSON();
+    const slider = document.getElementById("yearSlider");
+    slider.max = years.length - 1;
+    slider.value = 0;
 
-// Load first year
-updateMap(0);
+    // Set initial year data
+    currentYearData = allData[years[0]] || [];
+
+    geojsonLayer = L.geoJSON(geojson, {
+        style: styleFeature,
+        onEachFeature: onEachFeature
+    }).addTo(map);
+
+    // Fit map to ASEAN bounds
+    map.fitBounds(geojsonLayer.getBounds());
+
+    updateMap(0);
+
+    slider.addEventListener("input", function() {
+        updateMap(parseInt(this.value));
+    });
+})();
 </script>
 {% endblock %}
