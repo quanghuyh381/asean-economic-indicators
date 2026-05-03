@@ -154,21 +154,37 @@ def download():
             download_name="ASEAN_data.xlsx"
         )
 @app.route("/map")
+@app.route("/map")
 def map_page():
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
-        SELECT c.country_id, c.country_name, ig.label, r.region_name
+        SELECT c.country_id, c.country_name, ig.label, r.region_name, fci.year_id
         FROM dim_countries c
         JOIN fact_country_income fci ON c.country_id = fci.country_id
         JOIN dim_income_groups ig ON fci.income_group_id = ig.income_group_id
         JOIN dim_regions r ON c.region_id = r.region_id
-        WHERE fci.year_id = (SELECT MAX(year_id) FROM fact_country_income)
-        ORDER BY c.country_name
+        ORDER BY fci.year_id, c.country_name
     """)
-    countries = cur.fetchall()
+    rows = cur.fetchall()
+    cur.execute("SELECT DISTINCT year_id FROM fact_country_income ORDER BY year_id")
+    years = [r[0] for r in cur.fetchall()]
     cur.close()
     conn.close()
-    return render_template("map.html", countries=countries)
+
+    # Build a dictionary: {year: [{country_id, name, income, region}]}
+    data = {}
+    for row in rows:
+        year = row[4]
+        if year not in data:
+            data[year] = []
+        data[year].append({
+            "id": row[0],
+            "name": row[1],
+            "income": row[2],
+            "region": row[3]
+        })
+
+    return render_template("map.html", data=data, years=years)
 if __name__ == "__main__":
     app.run(debug=True)

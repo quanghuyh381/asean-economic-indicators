@@ -11,8 +11,13 @@
 
 <div id="map"></div>
 
+<div class="slider-box">
+    <label for="yearSlider">📅 Year: <strong id="yearLabel">2000</strong></label>
+    <input type="range" id="yearSlider" min="0" max="0" value="0" step="1">
+</div>
+
 <div class="income-table">
-    <h3>📋 Country Income Status</h3>
+    <h3>📋 Country Income Status — <span id="tableYear">2000</span></h3>
     <table>
         <thead>
             <tr>
@@ -21,41 +26,16 @@
                 <th>Income Group</th>
             </tr>
         </thead>
-        <tbody>
-            {% for country in countries %}
-            <tr>
-                <td>{{ country[1] }}</td>
-                <td>{{ country[3] }}</td>
-                <td>
-                    {% if country[2] == "High Income" %}
-                        <span class="badge high">{{ country[2] }}</span>
-                    {% elif country[2] == "Upper-middle Income" %}
-                        <span class="badge upper">{{ country[2] }}</span>
-                    {% elif country[2] == "Lower-middle Income" %}
-                        <span class="badge lower">{{ country[2] }}</span>
-                    {% else %}
-                        <span class="badge low">{{ country[2] }}</span>
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
+        <tbody id="incomeTableBody"></tbody>
     </table>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-const countryData = {
-    {% for country in countries %}
-    "{{ country[0] }}": {
-        name: "{{ country[1] }}",
-        income: "{{ country[2] }}",
-        region: "{{ country[3] }}"
-    },
-    {% endfor %}
-};
+const allData = {{ data | tojson }};
+const years = {{ years | tojson }};
 
 const incomeColors = {
     "High Income": "#27ae60",
@@ -78,38 +58,83 @@ const countryCoords = {
 };
 
 const map = L.map("map").setView([7.0, 110.0], 4);
-
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "© OpenStreetMap contributors"
 }).addTo(map);
 
-Object.entries(countryCoords).forEach(([code, coords]) => {
-    const info = countryData[code];
-    if (!info) return;
-    const color = incomeColors[info.income] || "#999";
+let markers = [];
 
-    L.circleMarker(coords, {
-        radius: 18,
-        fillColor: color,
-        color: "white",
-        weight: 2,
-        opacity: 1,
-        fillOpacity: 0.85
-    })
-    .addTo(map)
-    .bindPopup(`
-        <b>${info.name}</b><br>
-        Income Group: <b>${info.income}</b><br>
-        Region: ${info.region}
-    `);
+function updateMap(yearIndex) {
+    const year = years[yearIndex];
+    const countries = allData[year] || [];
 
-    L.marker(coords, {
-        icon: L.divIcon({
-            className: "",
-            html: `<div style="color:white; font-weight:bold; font-size:10px; text-align:center; width:36px; margin-left:-18px; margin-top:-8px;">${info.name.split(" ")[0]}</div>`,
-            iconSize: [36, 16]
+    document.getElementById("yearLabel").innerText = year;
+    document.getElementById("tableYear").innerText = year;
+
+    // Remove old markers
+    markers.forEach(m => map.removeLayer(m));
+    markers = [];
+
+    // Add new markers
+    countries.forEach(c => {
+        const coords = countryCoords[c.id];
+        if (!coords) return;
+        const color = incomeColors[c.income] || "#999";
+
+        const circle = L.circleMarker(coords, {
+            radius: 20,
+            fillColor: color,
+            color: "white",
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.85
         })
-    }).addTo(map);
+        .addTo(map)
+        .bindPopup(`
+            <b>${c.name}</b><br>
+            Year: <b>${year}</b><br>
+            Income Group: <b>${c.income}</b><br>
+            Region: ${c.region}
+        `);
+
+        const label = L.marker(coords, {
+            icon: L.divIcon({
+                className: "",
+                html: `<div style="color:white; font-weight:bold; font-size:10px; text-align:center; width:40px; margin-left:-20px; margin-top:-8px;">${c.name.split(" ")[0]}</div>`,
+                iconSize: [40, 16]
+            })
+        }).addTo(map);
+
+        markers.push(circle);
+        markers.push(label);
+    });
+
+    // Update table
+    const tbody = document.getElementById("incomeTableBody");
+    tbody.innerHTML = "";
+    countries.forEach(c => {
+        const badgeClass = c.income === "High Income" ? "high" :
+                           c.income === "Upper-middle Income" ? "upper" :
+                           c.income === "Lower-middle Income" ? "lower" : "low";
+        tbody.innerHTML += `
+            <tr>
+                <td>${c.name}</td>
+                <td>${c.region}</td>
+                <td><span class="badge ${badgeClass}">${c.income}</span></td>
+            </tr>
+        `;
+    });
+}
+
+// Set up slider
+const slider = document.getElementById("yearSlider");
+slider.max = years.length - 1;
+slider.value = 0;
+slider.addEventListener("input", function() {
+    updateMap(parseInt(this.value));
 });
+
+// Load first year
+updateMap(0);
 </script>
 {% endblock %}

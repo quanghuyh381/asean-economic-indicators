@@ -44,3 +44,6 @@ button:hover { background: #1a6a9a; }
 .badge.lower { background: #f39c12; }
 .badge.low { background: #e74c3c; }
 nav a { color: white; text-decoration: none; font-size: 16px; margin-right: 20px; }
+.slider-box { margin-top: 20px; padding: 15px 20px; background: #f9f9f9; border-radius: 8px; border: 1px solid #ddd; }
+.slider-box label { font-size: 15px; color: #2c3e50; display: block; margin-bottom: 8px; }
+#yearSlider { width: 100%; height: 6px; accent-color: #2980b9; cursor: pointer; }
