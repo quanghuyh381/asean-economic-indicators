@@ -153,5 +153,22 @@ def download():
             as_attachment=True,
             download_name="ASEAN_data.xlsx"
         )
+@app.route("/map")
+def map_page():
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT c.country_id, c.country_name, ig.label, r.region_name
+        FROM dim_countries c
+        JOIN fact_country_income fci ON c.country_id = fci.country_id
+        JOIN dim_income_groups ig ON fci.income_group_id = ig.income_group_id
+        JOIN dim_regions r ON c.region_id = r.region_id
+        WHERE fci.year_id = (SELECT MAX(year_id) FROM fact_country_income)
+        ORDER BY c.country_name
+    """)
+    countries = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template("map.html", countries=countries)
 if __name__ == "__main__":
     app.run(debug=True)

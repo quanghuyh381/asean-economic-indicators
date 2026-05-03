@@ -7,9 +7,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <nav>
-        <a href="/">🏠 Home</a>
-    </nav>
+<nav>
+    <a href="/">🏠 Home</a>
+    <a href="/map">🗺️ Income Map</a>
+</nav>
     <div class="container">
         {% block content %}{% endblock %}
     </div>

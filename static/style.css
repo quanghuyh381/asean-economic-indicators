@@ -32,3 +32,15 @@ tr:hover { background: #f0f0f0; }
 #definitionBox p { margin: 0; color: #555; font-size: 14px; line-height: 1.6; }
 button { padding: 9px 18px; background: #2980b9; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; margin-right: 5px; }
 button:hover { background: #1a6a9a; }
+#map { height: 500px; width: 100%; border-radius: 8px; margin-top: 20px; z-index: 0; }
+.legend { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 10px; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+.dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; }
+.income-table { margin-top: 30px; }
+.income-table h3 { color: #2c3e50; margin-bottom: 10px; }
+.badge { padding: 4px 10px; border-radius: 12px; font-size: 12px; color: white; font-weight: bold; }
+.badge.high { background: #27ae60; }
+.badge.upper { background: #2980b9; }
+.badge.lower { background: #f39c12; }
+.badge.low { background: #e74c3c; }
+nav a { color: white; text-decoration: none; font-size: 16px; margin-right: 20px; }
