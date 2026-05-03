@@ -24,21 +24,6 @@
 
 <canvas id="myChart"></canvas>
 
-<div id="tableBox" style="display:none;">
-    <h3>📋 Data Table</h3>
-    <table id="dataTable">
-        <thead>
-            <tr>
-                <th>Year</th>
-                <th>Value</th>
-                <th>Type</th>
-            </tr>
-        </thead>
-        <tbody id="tableBody">
-        </tbody>
-    </table>
-</div>
-
 <div id="definitionBox" style="display:none;">
     <h3>📖 Indicator Description</h3>
     <p id="definitionText"></p>
@@ -143,7 +128,10 @@ async function loadChart() {
                         display: true,
                         text: "Year",
                         color: "#2c3e50",
-                        font: { size: 13, weight: "bold" }
+                        font: {
+                            size: 13,
+                            weight: "bold"
+                        }
                     }
                 },
                 y: {
@@ -152,7 +140,10 @@ async function loadChart() {
                         display: true,
                         text: unit,
                         color: "#2c3e50",
-                        font: { size: 13, weight: "bold" }
+                        font: {
+                            size: 13,
+                            weight: "bold"
+                        }
                     },
                     ticks: {
                         callback: function(value) {
@@ -166,22 +157,7 @@ async function loadChart() {
         }
     });
 
-    // Build the table
-    const tbody = document.getElementById("tableBody");
-    tbody.innerHTML = "";
-    data.forEach(d => {
-        const row = document.createElement("tr");
-        if (d.crisis) row.style.backgroundColor = "#fdecea";
-        row.innerHTML = `
-            <td>${d.year}</td>
-            <td>${d.value.toLocaleString(undefined, {maximumFractionDigits: 2})}</td>
-            <td>${d.crisis ? "🔴 Crisis" : "🔵 Normal"}</td>
-        `;
-        tbody.appendChild(row);
-    });
-    document.getElementById("tableBox").style.display = "block";
-
-    // Show definition
+    // Show definition at the bottom
     if (definition) {
         document.getElementById("definitionText").innerText = definition;
         document.getElementById("definitionBox").style.display = "block";
