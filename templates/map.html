@@ -44,18 +44,18 @@ const incomeColors = {
     "Low Income": "#e74c3c"
 };
 
-// ISO 3166-1 alpha-3 to alpha-2 mapping for GeoJSON
-const codeMap = {
-    "BRN": "BN",
-    "KHM": "KH",
-    "IDN": "ID",
-    "LAO": "LA",
-    "MYS": "MY",
-    "MMR": "MM",
-    "PHL": "PH",
-    "SGP": "SG",
-    "THA": "TH",
-    "VNM": "VN"
+// Map our country IDs to GeoJSON ISO_A3 codes
+const aseanISO = {
+    "BRN": "BRN",
+    "KHM": "KHM",
+    "IDN": "IDN",
+    "LAO": "LAO",
+    "MYS": "MYS",
+    "MMR": "MMR",
+    "PHL": "PHL",
+    "SGP": "SGP",
+    "THA": "THA",
+    "VNM": "VNM"
 };
 
 const map = L.map("map").setView([7.0, 110.0], 4);
@@ -64,44 +64,30 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 }).addTo(map);
 
 let geojsonLayer = null;
-let currentYearData = {};
+let currentYearData = [];
 
-// Fetch GeoJSON for ASEAN countries
-async function loadGeoJSON() {
-    const res = await fetch("https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson");
-    const geojson = await res.json();
-
-    // Filter only ASEAN countries
-    const aseanCodes = Object.values(codeMap);
-    geojson.features = geojson.features.filter(f =>
-        aseanCodes.includes(f.properties.ISO_A2)
-    );
-    return geojson;
-}
-
-function getCountryByAlpha2(alpha2, yearData) {
-    const alpha3 = Object.entries(codeMap).find(([k, v]) => v === alpha2)?.[0];
-    return yearData.find(c => c.id === alpha3);
+function getCountryInfo(iso3) {
+    return currentYearData.find(c => c.id === iso3);
 }
 
 function styleFeature(feature) {
-    const alpha2 = feature.properties.ISO_A2;
-    const country = getCountryByAlpha2(alpha2, Object.values(currentYearData));
+    const iso3 = feature.properties.ADM0_A3 || feature.properties.ISO_A3 || feature.properties.iso_a3;
+    const country = getCountryInfo(iso3);
     const color = country ? (incomeColors[country.income] || "#ccc") : "#ccc";
     return {
         fillColor: color,
         weight: 1.5,
         opacity: 1,
         color: "white",
-        fillOpacity: 0.75
+        fillOpacity: country ? 0.8 : 0
     };
 }
 
 function onEachFeature(feature, layer) {
     layer.on({
         mouseover: function(e) {
-            const alpha2 = feature.properties.ISO_A2;
-            const country = getCountryByAlpha2(alpha2, Object.values(currentYearData));
+            const iso3 = feature.properties.ADM0_A3 || feature.properties.ISO_A3 || feature.properties.iso_a3;
+            const country = getCountryInfo(iso3);
             if (country) {
                 layer.bindPopup(`
                     <b>${country.name}</b><br>
@@ -109,8 +95,8 @@ function onEachFeature(feature, layer) {
                     Income Group: <b>${country.income}</b><br>
                     Region: ${country.region}
                 `).openPopup();
+                layer.setStyle({ weight: 3, color: "#333", fillOpacity: 0.95 });
             }
-            layer.setStyle({ weight: 3, color: "#333", fillOpacity: 0.9 });
         },
         mouseout: function() {
             geojsonLayer.resetStyle(layer);
@@ -126,7 +112,6 @@ function updateMap(yearIndex) {
     document.getElementById("yearLabel").innerText = year;
     document.getElementById("tableYear").innerText = year;
 
-    // Update GeoJSON colors
     if (geojsonLayer) {
         geojsonLayer.setStyle(styleFeature);
     }
@@ -148,14 +133,19 @@ function updateMap(yearIndex) {
     });
 }
 
-// Initialize
-(async () => {
-    const geojson = await loadGeoJSON();
-    const slider = document.getElementById("yearSlider");
-    slider.max = years.length - 1;
-    slider.value = 0;
+// Load GeoJSON from Natural Earth which uses ADM0_A3
+async function init() {
+    const res = await fetch("https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson");
+    const geojson = await res.json();
 
-    // Set initial year data
+    // Filter only ASEAN countries
+    const aseanCodes = Object.values(aseanISO);
+    geojson.features = geojson.features.filter(f => {
+        const iso = f.properties.ADM0_A3 || f.properties.ISO_A3 || f.properties.iso_a3;
+        return aseanCodes.includes(iso);
+    });
+
+    // Set initial data
     currentYearData = allData[years[0]] || [];
 
     geojsonLayer = L.geoJSON(geojson, {
@@ -163,14 +153,18 @@ function updateMap(yearIndex) {
         onEachFeature: onEachFeature
     }).addTo(map);
 
-    // Fit map to ASEAN bounds
     map.fitBounds(geojsonLayer.getBounds());
 
-    updateMap(0);
-
+    const slider = document.getElementById("yearSlider");
+    slider.max = years.length - 1;
+    slider.value = 0;
     slider.addEventListener("input", function() {
         updateMap(parseInt(this.value));
     });
-})();
+
+    updateMap(0);
+}
+
+init();
 </script>
 {% endblock %}
