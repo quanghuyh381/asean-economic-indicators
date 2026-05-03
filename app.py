@@ -210,14 +210,55 @@ def correlation_data():
     cur = conn.cursor()
 
     # Call correlate function directly from PostgreSQL
-    cur.execute("""
-        SELECT * FROM correlate(%s, %s, %s, %s, %s)
-    """, (mode, country1, indicator1, indicator2,
-          country2 if mode == 'compare' else None))
+    if mode == "all":
+        cur.execute("""
+            SELECT * FROM correlate(%s, NULL, %s, %s, NULL)
+        """, (mode, indicator1, indicator2))
+    elif mode == "single":
+        cur.execute("""
+            SELECT * FROM correlate(%s, %s, %s, %s, NULL)
+        """, (mode, country1, indicator1, indicator2))
+    else:
+        cur.execute("""
+            SELECT * FROM correlate(%s, %s, %s, %s, %s)
+        """, (mode, country1, indicator1, indicator2, country2))
+
     row = cur.fetchone()
 
     # Get scatter plot points
-    if mode == "single":
+    if mode == "all":
+        cur.execute("""
+            SELECT c.country_name, c.country_id, f1.year_id, f1.value, f2.value
+            FROM fact_economic_data f1
+            JOIN fact_economic_data f2
+                ON f1.year_id = f2.year_id AND f1.country_id = f2.country_id
+            JOIN dim_indicators i1 ON f1.indicator_id = i1.indicator_id
+            JOIN dim_indicators i2 ON f2.indicator_id = i2.indicator_id
+            JOIN dim_countries c ON f1.country_id = c.country_id
+            WHERE i1.indicator_name ILIKE %s
+            AND i2.indicator_name ILIKE %s
+            ORDER BY c.country_name, f1.year_id
+        """, (f'%{indicator1}%', f'%{indicator2}%'))
+        points = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        if not row or row[0] is None:
+            return jsonify({"error": "Insufficient data"})
+
+        return jsonify({
+            "corr": float(row[0]),
+            "interpretation": row[1],
+            "obs": row[2],
+            "name1": row[3],
+            "name2": row[4],
+            "mode": "all",
+            "points": [{"country": p[0], "country_id": p[1],
+                        "year": p[2], "x": float(p[3]),
+                        "y": float(p[4])} for p in points]
+        })
+
+    elif mode == "single":
         cur.execute("""
             SELECT f1.year_id, f1.value, f2.value
             FROM fact_economic_data f1
@@ -256,7 +297,7 @@ def correlation_data():
         "obs": row[2],
         "name1": row[3],
         "name2": row[4],
-        "points": [{"year": p[0], "x": float(p[1]), "y": float(p[2])} for p in points]
+        "mode": mode,
+        "points": [{"year": p[0], "x": float(p[1]),
+                    "y": float(p[2])} for p in points]
     })
-if __name__ == "__main__":
-    app.run(debug=True)

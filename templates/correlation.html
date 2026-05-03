@@ -31,10 +31,11 @@
             <select id="modeSelect" onchange="toggleMode()">
                 <option value="single">Single Country</option>
                 <option value="compare">Compare Countries</option>
+                <option value="all">All Countries</option>
             </select>
         </div>
 
-        <div class="sidebar-section">
+        <div class="sidebar-section" id="country1Box">
             <label>Country 1</label>
             <select id="country1">
                 {% for id, name in countries %}
@@ -79,16 +80,31 @@
 <script>
 let corrChart;
 
+const countryColors = {
+    "BRN": "#e74c3c", "KHM": "#e67e22", "IDN": "#f1c40f",
+    "LAO": "#2ecc71", "MYS": "#1abc9c", "MMR": "#3498db",
+    "PHL": "#9b59b6", "SGP": "#e91e63", "THA": "#00bcd4", "VNM": "#ff5722"
+};
+
 function toggleMode() {
     const mode = document.getElementById("modeSelect").value;
+    const c1box = document.getElementById("country1Box");
     const c2box = document.getElementById("country2Box");
     const ind1label = document.getElementById("ind1Label");
     const ind2label = document.getElementById("ind2Label");
-    if (mode === "compare") {
+
+    if (mode === "single") {
+        c1box.style.display = "block";
+        c2box.style.display = "none";
+        ind1label.innerText = "Indicator 1 (X-Axis)";
+        ind2label.innerText = "Indicator 2 (Y-Axis)";
+    } else if (mode === "compare") {
+        c1box.style.display = "block";
         c2box.style.display = "block";
         ind1label.innerText = "Indicator (Country 1)";
         ind2label.innerText = "Indicator (Country 2)";
-    } else {
+    } else if (mode === "all") {
+        c1box.style.display = "none";
         c2box.style.display = "none";
         ind1label.innerText = "Indicator 1 (X-Axis)";
         ind2label.innerText = "Indicator 2 (Y-Axis)";
@@ -118,27 +134,55 @@ async function analyse() {
 
     if (corrChart) corrChart.destroy();
 
+    let datasets;
+
+    if (json.mode === "all") {
+        // Group points by country
+        const grouped = {};
+        json.points.forEach(p => {
+            if (!grouped[p.country_id]) {
+                grouped[p.country_id] = {
+                    label: p.country,
+                    data: [],
+                    backgroundColor: (countryColors[p.country_id] || "#999") + "cc",
+                    pointRadius: 6,
+                    pointHoverRadius: 9,
+                    borderColor: countryColors[p.country_id] || "#999",
+                    borderWidth: 1
+                };
+            }
+            grouped[p.country_id].data.push({ x: p.x, y: p.y, year: p.year });
+        });
+        datasets = Object.values(grouped);
+    } else {
+        datasets = [{
+            label: `${json.name1} vs ${json.name2}`,
+            data: json.points.map(p => ({ x: p.x, y: p.y, year: p.year })),
+            backgroundColor: corrColor + "aa",
+            pointRadius: 7,
+            pointHoverRadius: 9,
+            borderColor: corrColor,
+            borderWidth: 1
+        }];
+    }
+
     corrChart = new Chart(document.getElementById("corrChart"), {
         type: "scatter",
-        data: {
-            datasets: [{
-                label: `${json.name1} vs ${json.name2}`,
-                data: json.points.map(p => ({ x: p.x, y: p.y, year: p.year })),
-                backgroundColor: corrColor + "aa",
-                pointRadius: 7,
-                pointHoverRadius: 9,
-                borderColor: corrColor,
-                borderWidth: 1
-            }]
-        },
+        data: { datasets },
         options: {
             responsive: true,
             plugins: {
-                legend: { display: false },
+                legend: {
+                    display: json.mode === "all",
+                    position: "bottom",
+                    labels: { usePointStyle: true, font: { size: 11 } }
+                },
                 tooltip: {
                     callbacks: {
                         label: function(ctx) {
-                            return `Year ${ctx.raw.year}: (${ctx.raw.x.toLocaleString()}, ${ctx.raw.y.toLocaleString()})`;
+                            const d = ctx.raw;
+                            const prefix = json.mode === "all" ? ctx.dataset.label + " " : "";
+                            return `${prefix}Year ${d.year}: (${d.x.toLocaleString()}, ${d.y.toLocaleString()})`;
                         }
                     }
                 }
@@ -172,14 +216,11 @@ async function analyse() {
         }
     });
 
-    // Show results
     document.getElementById("resCorr").innerText = json.corr;
     document.getElementById("resCorr").style.color = corrColor;
     document.getElementById("resInterp").innerText = json.interpretation;
     document.getElementById("resInterp").style.color = corrColor;
     document.getElementById("resObs").innerText = json.obs;
-    document.getElementById("resName1").innerText = json.name1;
-    document.getElementById("resName2").innerText = json.name2;
     document.getElementById("resultBox").style.display = "block";
 }
 
@@ -189,6 +230,7 @@ function resetAll() {
     document.getElementById("country2").selectedIndex = 1;
     document.getElementById("indicator1").selectedIndex = 0;
     document.getElementById("indicator2").selectedIndex = 1;
+    document.getElementById("country1Box").style.display = "block";
     document.getElementById("country2Box").style.display = "none";
     document.getElementById("resultBox").style.display = "none";
     document.getElementById("chartSubtitle").innerText = "Select options and click Analyse";
