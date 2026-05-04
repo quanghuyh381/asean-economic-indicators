@@ -194,5 +194,6 @@ function downloadFile(format) {
     const indicator = document.getElementById("indicatorSelect").value;
     window.location.href = `/download?country=${country}&indicator=${indicator}&format=${format}`;
 }
+loadChart();
 </script>
 {% endblock %}
