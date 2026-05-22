@@ -97,7 +97,3 @@ The database follows a **star schema** data warehouse design.
 | Vietnam | VNM |
 
 ---
-
-## 🚀 Run Locally
-
-### 1. Clone the repository
